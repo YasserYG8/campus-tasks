@@ -25,6 +25,7 @@ def check_db():
         with socket.create_connection((host, port), timeout=2):
             return True, f"{host}:{port} joignable"
     except OSError as exc:
+
         return False, f"{host}:{port} injoignable ({exc})"
 
 
@@ -32,7 +33,6 @@ def check_db():
 def health():
     # Santé du processus web uniquement : ne dépend pas de la base
     return jsonify(status="ok")
-
 
 @app.get("/info")
 def info():
@@ -53,20 +53,6 @@ if __name__ == "__main__":
         log.info("base de données : %s", detail)
     elif ok is False:
         log.error("base de données : %s", detail)
-        
-import os
-
-from flask import Flask, jsonify
-
-app = Flask(__name__)
-
-
-@app.get("/health")
-def health():
-    return jsonify(status="ok")
-
-
-if __name__ == "__main__":
     # 0.0.0.0 : accepter les connexions venant de l'extérieur du conteneur
     port = int(os.environ.get("PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
