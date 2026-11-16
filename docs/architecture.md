@@ -1,3 +1,3 @@
 # Architecture
 
-API de gestion de tache étudiantes.
+API de gestion de tâches étudiantes.
