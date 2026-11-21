@@ -5,3 +5,10 @@ __pycache__/
 .venv/
 # Sujets des ateliers (PDF) : documents du cours, jamais versionnés
 sujets/
+# Atelier 5 : valeurs locales de mise en service et sorties de tests
+.env.staging
+.env.deploy
+report.xml
+.pytest_cache/
+# Métadonnées Windows créées lors d'un téléchargement
+*:Zone.Identifier
