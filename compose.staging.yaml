@@ -1,0 +1,9 @@
+# Environnement de test (staging) : réutilise l'image publiée, sans reconstruire.
+# La version est choisie par IMAGE_TAG, lue dans .env.deploy :
+#   docker compose --env-file .env.deploy -f compose.staging.yaml up -d
+services:
+  api:
+    image: ghcr.io/yasseryg8/campus-tasks:${IMAGE_TAG}
+    ports: ["8080:8080"]
+    env_file: [.env.staging]
+    restart: unless-stopped

@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+# Droits minimaux par défaut ; chaque job demande seulement ce dont il a besoin
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # Une seule exécution produit à la fois le résultat et le rapport :
+      # si un test échoue, report.xml existe quand même.
+      - name: Tests et rapport
+        run: pytest -q --junitxml=report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-tests
+          path: report.xml
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Vrai uniquement quand un tag v* est poussé : on publie alors l'image
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Nom de l'image (ghcr.io exige des minuscules)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/campus-tasks" >> "$GITHUB_ENV"
+      - name: Connexion à ghcr.io
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ env.PUBLISH == 'true' && format('{0}:{1}', env.IMAGE, github.ref_name) || 'campus-tasks:ci' }}
+
+  # Défi final : mise en service de la version publiée, sur les tags uniquement,
+  # suivie du contrôle de santé. On réutilise l'image publiée : aucune reconstruction.
+  deploy-staging:
+    needs: docker-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Mise en service
+        run: |
+          printf 'IMAGE_TAG=%s\n' "$GITHUB_REF_NAME" > .env.deploy
+          cp .env.staging.example .env.staging
+          docker compose --env-file .env.deploy -f compose.staging.yaml pull
+          docker compose --env-file .env.deploy -f compose.staging.yaml up -d
+          docker compose --env-file .env.deploy -f compose.staging.yaml ps
+      - name: Contrôle de santé
+        run: ./scripts/wait-healthy.sh
+      - name: Journaux de l'API
+        if: always()
+        run: docker compose --env-file .env.deploy -f compose.staging.yaml logs --tail=50 api
